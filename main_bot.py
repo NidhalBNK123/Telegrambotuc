@@ -6,7 +6,7 @@ from telegram.ext import CallbackContext, CommandHandler, MessageHandler, Filter
 
 # قائمة المستخدمين الذين لديهم صلاحيات الإدارة (المالكين)
 OWNER_ID = [6956219256,5058633862]  # استبدل هذا بـ ID مالك البوت الخاص بك
-token= "7599187770:AAHG4aQLlN7vZCD_YHGbCo2iw-6zRKF4fHg"
+token= "7760053949:AAFOPSY1eD4GjelBo2D_rIa7nCmOn9n6OYM"
 data = {"fraudsters": [], "usernames": []}
 
 # تحميل البيانات من ملف users.json
