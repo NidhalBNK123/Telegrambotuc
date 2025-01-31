@@ -159,7 +159,7 @@ def process_update(update_json, token):
 
 @app.route('/<token>/webhook', methods=['POST'])
 def webhook(token):
-    if token in [bot['token'] for bot in TOKENS] or token == "7125482530:AAEzCo6WcF17bGn0xrg503NOGreQ912agwg":  # استبدل "main_bot_token" بالتوكن الرئيسي
+    if token in [bot['token'] for bot in TOKENS] or token == "7760053949:AAFOPSY1eD4GjelBo2D_rIa7nCmOn9n6OYM":  # استبدل "main_bot_token" بالتوكن الرئيسي
         update_json = request.get_json(force=True)
         threading.Thread(target=process_update, args=(update_json, token)).start()
         return 'OK'
