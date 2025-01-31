@@ -1,161 +1,339 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
 import json
-# تحميل بيانات التكوين من ملف JSON
-def load_tokens():
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, Bot
+from telegram.ext import CallbackContext, CommandHandler, MessageHandler, Filters, CallbackQueryHandler, Updater
+
+
+
+# قائمة المستخدمين الذين لديهم صلاحيات الإدارة (المالكين)
+OWNER_ID = [6956219256,5058633862]  # استبدل هذا بـ ID مالك البوت الخاص بك
+token= "7599187770:AAHG4aQLlN7vZCD_YHGbCo2iw-6zRKF4fHg"
+data = {"fraudsters": [], "usernames": []}
+
+# تحميل البيانات من ملف users.json
+def load_users():
     try:
-        with open('bots.json', 'r') as file:
-            return json.load(file).get('bots', [])
+        with open("users.json", "r") as file:
+            return json.load(file)
     except FileNotFoundError:
-        return []
-    except json.JSONDecodeError:
-        return []
+        return []  # إذا لم يوجد الملف، نقوم بإنشاء قائمة فارغة
 
-# حفظ بيانات التكوين إلى ملف JSON
-def save_tokens(tokens):
-    with open('bots.json', 'w') as file:
-        json.dump({'bots': tokens}, file, indent=4)
+# حفظ البيانات إلى ملف users.json
+def save_users(users):
+    with open("users.json", "w", encoding="utf-8") as file:
+        json.dump(users, file, ensure_ascii=False, indent=4)
 
-TOKENS = load_tokens()
+def load_data():
+    global data
+    try:
+        with open("data.json", "r") as file:
+            data = json.load(file)
+    except FileNotFoundError:
+        save_data(data)
 
-def start(update: Update, context: CallbackContext) -> None:
-    user = update.message.from_user if update.message else update.callback_query.from_user
-    welcome_text = (
-        f"👋 <b>مرحباً بك {user.first_name}</b> في بوت إدارة البوتات الفرعية\n\n"
-        "هذا البوت يتيح لك <b>إضافة بوتات فرعية</b> وإدارتها، بالإضافة إلى <b>عرض معلوماتها</b> و<b>حذفها</b>."
-    )
+def save_data(data):
+    with open("data.json", "w", encoding="utf-8") as file:
+        json.dump(data, file, ensure_ascii=False, indent=4)
+
+def start(update: Update, context: CallbackContext):
+    context.user_data.clear()
+    users = load_users()
+    user_id = update.message.from_user.id
+    user_name = update.message.from_user.full_name
+
+    # إضافة المستخدم إلى الملف إذا لم يكن موجودًا
+    if not any(user['id'] == user_id for user in users):
+        users.append({"id": user_id, "name": user_name})
+        save_users(users)
+
     keyboard = [
-        [InlineKeyboardButton("إضافة بوت فرعي", callback_data='add_sub_bot')],
-        [InlineKeyboardButton("عرض المعلومات", callback_data='view_info')],
-        [InlineKeyboardButton("حذف بوت فرعي", callback_data='delete_sub_bot')]
+        [InlineKeyboardButton("🔍 البحث عن تاجر أو نصاب", callback_data="search_fraudsters")],
+        [InlineKeyboardButton("🔍 البحث عن معرف (آيدي ببجي)", callback_data="search_usernames")]
+    ]
+
+    if user_id in OWNER_ID:
+        keyboard += [
+            [InlineKeyboardButton("⚙️ إدارة التجار/النصابين", callback_data="admin_fraudsters")],
+            [InlineKeyboardButton("⚙️ إدارة المعرفات", callback_data="admin_usernames")],
+            [InlineKeyboardButton("📢 إذاعة للجميع", callback_data="broadcast_message")]
+        ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text(
+        "مرحبًا بك في بوت الكشف! اختر ما تريد البحث عنه:",
+        reply_markup=reply_markup
+    )
+
+def admin_menu(update: Update, context: CallbackContext):
+    keyboard = [
+        [InlineKeyboardButton("➕ إضافة تاجر/نصاب", callback_data="add_fraudster")],
+        [InlineKeyboardButton("📋 عرض قائمة التجار/النصابين", callback_data="list_fraudsters")],
+        [InlineKeyboardButton("❌ حذف تاجر/نصاب", callback_data="delete_fraudster")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    if update.message:
-        update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+    update.callback_query.edit_message_text("⚙️ إدارة التجار/النصابين: اختر العملية التي تريد تنفيذها:", reply_markup=reply_markup)
+
+def admin_usernames_menu(update: Update, context: CallbackContext):
+    keyboard = [
+        [InlineKeyboardButton("➕ إضافة معرف", callback_data="add_username")],
+        [InlineKeyboardButton("📋 عرض قائمة المعرفات", callback_data="list_usernames")],
+        [InlineKeyboardButton("❌ حذف معرف", callback_data="delete_username")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.callback_query.edit_message_text("⚙️ إدارة المعرفات: اختر العملية التي تريد تنفيذها:", reply_markup=reply_markup)
+
+def search_fraudsters(update: Update, context: CallbackContext):
+    update.callback_query.answer()
+    update.callback_query.edit_message_text("🔍 أرسل أي معلومة تمتلكها للبحث عن تاجر أو نصاب:")
+    context.user_data["action"] = "search_fraudster"
+
+def search_usernames(update: Update, context: CallbackContext):
+    update.callback_query.answer()
+    update.callback_query.edit_message_text("🔍 أرسل (آيدي ببجي) للبحث عنه:")
+    context.user_data["action"] = "search_username"
+
+def add_fraudster_steps(update: Update, context: CallbackContext):
+    step = context.user_data.get("add_step", 0)
+
+    if step == 0:
+        context.user_data["new_fraudster"] = {"name": update.message.text.strip()}
+        update.message.reply_text("📞 أدخل رقم هاتف التاجر/النصاب:")
+        context.user_data["add_step"] = 1
+    elif step == 1:
+        context.user_data["new_fraudster"]["phone"] = update.message.text.strip()
+        update.message.reply_text("💳 أدخل رقم بريدي موب الخاص بالتاجر/النصاب:")
+        context.user_data["add_step"] = 2
+    elif step == 2:
+        context.user_data["new_fraudster"]["bardi_mob"] = update.message.text.strip()
+        update.message.reply_text("🔗 أدخل روابط مواقع التواصل الخاصة بالتاجر/النصاب:")
+        context.user_data["add_step"] = 3
+    elif step == 3:
+        context.user_data["new_fraudster"]["social_links"] = update.message.text.strip()
+        update.message.reply_text("📝 أدخل ملاحظة عن التاجر/النصاب:")
+        context.user_data["add_step"] = 4
+    elif step == 4:
+        context.user_data["new_fraudster"]["note"] = update.message.text.strip()
+        data["fraudsters"].append(context.user_data["new_fraudster"])
+        save_data(data)
+        update.message.reply_text("✅ تم إضافة التاجر/النصاب بنجاح!")
+        context.user_data["action"] = None
+
+def add_username(update: Update, context: CallbackContext):
+    update.callback_query.answer()
+    update.callback_query.edit_message_text("🔗 أرسل المعرف الذي تريد إضافته:")
+    context.user_data["action"] = "add_username"
+
+def list_fraudsters(update: Update, context: CallbackContext):
+    update.callback_query.answer()
+    if not data["fraudsters"]:
+        update.callback_query.edit_message_text("📋 لا توجد قائمة بالتجار/النصابين.")
     else:
-        update.callback_query.edit_message_text(welcome_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        text = "\n".join([f"{i+1}. {f['name']}" for i, f in enumerate(data["fraudsters"])])
+        update.callback_query.edit_message_text(f"📋 قائمة التجار/النصابين:\n\n{text}")
 
-def add_sub_bot_callback(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    query.answer()
-    query.edit_message_text(text="من فضلك <b>أرسل توكن البوت الفرعي</b>.", parse_mode=ParseMode.HTML)
-    context.user_data['waiting_for'] = 'token'
-
-def handle_message(update: Update, context: CallbackContext) -> None:
-    if update.message:
-        if 'waiting_for' in context.user_data:
-            waiting_for = context.user_data['waiting_for']
-            
-            if waiting_for == 'token':
-                token = update.message.text
-                if not any(bot['token'] == token for bot in TOKENS):
-                    context.user_data['current_token'] = token
-                    update.message.reply_text("<b>تم تسجيل التوكن.</b> الآن أرسل <b>اسم القناة</b> (بـ @username).", parse_mode=ParseMode.HTML)
-                    context.user_data['waiting_for'] = 'channel_username'
-                else:
-                    update.message.reply_text(f"التوكن <b>{token}</b> موجود بالفعل.", parse_mode=ParseMode.HTML)
-                    context.user_data['waiting_for'] = None
-            
-            elif waiting_for == 'channel_username':
-                channel_username = update.message.text
-                if context.user_data.get('current_token'):
-                    context.user_data['current_channel'] = channel_username
-                    update.message.reply_text("تم تسجيل <b>اسم القناة.</b> الآن أرسل <b>اسم الزبون</b>.", parse_mode=ParseMode.HTML)
-                    context.user_data['waiting_for'] = 'customer_name'
-            
-            elif waiting_for == 'customer_name':
-                customer_name = update.message.text
-                if context.user_data.get('current_token') and context.user_data.get('current_channel'):
-                    new_bot = {
-                        'token': context.user_data['current_token'],
-                        'channel': context.user_data['current_channel'],
-                        'name': customer_name
-                    }
-                    TOKENS.append(new_bot)
-                    save_tokens(TOKENS)
-                    update.message.reply_text(
-                        f"<b>تمت إضافة البوت بنجاح:</b>\n"
-                        f"<b>توكن:</b> {new_bot['token']}\n"
-                        f"<b>قناة:</b> {new_bot['channel']}\n"
-                        f"<b>عميل:</b> {customer_name}",
-                        parse_mode=ParseMode.HTML
-                    )
-                    context.user_data['waiting_for'] = None
-                    context.user_data['current_token'] = None
-                    context.user_data['current_channel'] = None
-                else:
-                    update.message.reply_text("لم يتم تسجيل التوكن أو القناة بشكل صحيح.", parse_mode=ParseMode.HTML)
-            
-            elif waiting_for == 'delete':
-                try:
-                    index = int(update.message.text) - 1
-                    if 0 <= index < len(TOKENS):
-                        deleted_bot = TOKENS.pop(index)
-                        save_tokens(TOKENS)
-                        update.message.reply_text(f"<b>تم حذف البوت بنجاح:</b>\nتوكن: {deleted_bot['token']}", parse_mode=ParseMode.HTML)
-                        context.user_data['waiting_for'] = None
-                    else:
-                        update.message.reply_text("رقم غير صالح. حاول مرة أخرى.", parse_mode=ParseMode.HTML)
-                except ValueError:
-                    update.message.reply_text("يرجى إدخال رقم صالح.", parse_mode=ParseMode.HTML)
-            else:
-                update.message.reply_text("لا أستطيع معالجة رسالتك في الوقت الحالي.", parse_mode=ParseMode.HTML)
+def list_usernames(update: Update, context: CallbackContext):
+    update.callback_query.answer()
+    if not data["usernames"]:
+        update.callback_query.edit_message_text("📋 لا توجد قائمة بالمعرفات.")
     else:
-        update.message.reply_text("لم أتمكن من معالجة الرسالة.", parse_mode=ParseMode.HTML)
+        text = "\n".join([f"{i+1}. {u}" for i, u in enumerate(data["usernames"])])
+        update.callback_query.edit_message_text(f"📋 قائمة المعرفات:\n\n{text}")
 
-def view_info_callback(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    query.answer()
-    
-    if TOKENS:
-        response = "<b>معلومات البوتات الفرعية:</b>\n\n"
-        for i, bot in enumerate(TOKENS, start=1):
-            response += f"<b>{i}- التوكن :</b> {bot['token']}\n<b>القناة :</b> {bot['channel']}\n<b>العميل :</b> {bot['name']}\n\n"
-        query.edit_message_text(response, parse_mode=ParseMode.HTML)
+def broadcast_message(update: Update, context: CallbackContext):
+    update.callback_query.answer()
+    update.callback_query.edit_message_text("📢 أرسل الرسالة التي تريد إذاعتها لجميع المستخدمين:")
+    context.user_data["action"] = "broadcast_message"
+
+def handle_broadcast_message(update: Update, context: CallbackContext):
+    message = update.message.text.strip()
+    users = load_users()
+
+    sent_count, failed_count = 0, 0
+    for user in users:
+        try:
+            context.bot.send_message(chat_id=user["id"], text=message)
+            sent_count += 1
+        except Exception as e:
+            failed_count += 1
+            print(f"خطأ مع {user['id']}: {e}")
+
+    update.message.reply_text(f"✅ تم الإرسال إلى {sent_count} مستخدم.")
+    if failed_count > 0:
+        update.message.reply_text(f"❌ فشل الإرسال إلى {failed_count} مستخدم.")
+    context.user_data["action"] = None
+
+def handle_message(update: Update, context: CallbackContext):
+    users = load_users()
+    user_id = update.message.from_user.id
+    user_name = update.message.from_user.full_name
+
+    if not any(user['id'] == user_id for user in users):
+        users.append({"id": user_id, "name": user_name})
+        save_users(users)
+
+    action = context.user_data.get("action")
+
+    if action == "broadcast_message":
+        handle_broadcast_message(update, context)
+
+    elif action == "add_fraudster":
+        add_fraudster_steps(update, context)
+
+    elif action == "search_fraudster":
+        query = update.message.text.strip()
+        results = [
+            f for f in data["fraudsters"]
+            if any(query.lower() in str(value).lower() for value in f.values())
+        ]
+        if results:
+            for f in results:
+                update.message.reply_text(
+                    f"🪪 الاسم: {f['name']}\n\n📞 الهاتف: {f['phone']}\n\n💳 بريدي موب: {f['bardi_mob']}\n\n🔗 الروابط:\n\n {f['social_links']}\n\n📝 ملاحظة: {f['note']}"
+                )
+        else:
+            update.message.reply_text("❌ لم يتم العثور على أي محتال بهذه المعلومات.")
+
+    elif action == "add_username":
+        username = update.message.text.strip()
+        if username in data["usernames"]:
+            update.message.reply_text("❌ هذا المعرف موجود مسبقًا.")
+        else:
+            data["usernames"].append(username)
+            save_data(data)
+            update.message.reply_text(f"✅ تم إضافة المعرف: {username}")
+        context.user_data["action"] = None
+
+    elif action == "search_username":
+        username = update.message.text.strip()
+        if username in data["usernames"]:
+            update.message.reply_text(f"❌ المعرف {username} تم التبليغ عليه.")
+        else:
+            update.message.reply_text(f"✅ المعرف {username} آمن حاليًا.")
+
+def delete_fraudster(update: Update, context: CallbackContext):
+    if not data["fraudsters"]:
+        update.callback_query.edit_message_text("📋 لا توجد قائمة بالتجار/النصابين.")
     else:
-        query.edit_message_text("لا توجد معلومات حالياً.", parse_mode=ParseMode.HTML)
+        keyboard = [
+            [InlineKeyboardButton(f"❌ {f['name']}", callback_data=f"confirm_delete_fraudster_{i}")]
+            for i, f in enumerate(data["fraudsters"])
+        ]
+        keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="admin_fraudsters")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.callback_query.edit_message_text("❌ اختر التاجر/النصاب الذي تريد حذفه:", reply_markup=reply_markup)
 
-def delete_sub_bot_callback(update: Update, context: CallbackContext) -> None:
+def confirm_delete_fraudster(update: Update, context: CallbackContext):
     query = update.callback_query
-    query.answer()
-    
-    if TOKENS:
-        response = "اختر <b>البوت الذي تريد حذفه</b>:\n\n"
-        for i, bot in enumerate(TOKENS, start=1):
-            response += f"<b>{i}- توكن:</b> {bot['token']}\n<b>قناة:</b> {bot['channel']}\n<b>عميل:</b> {bot['name']}\n\n"
-        response += "\n<b>أرسل الرقم الذي تريد حذفه.</b>"
-        context.user_data['waiting_for'] = 'delete'
-        query.edit_message_text(response, parse_mode=ParseMode.HTML)
+    fraudster_index = int(query.data.split("_")[-1])
+    fraudster = data["fraudsters"][fraudster_index]
+    keyboard = [
+        [InlineKeyboardButton("✅ نعم", callback_data=f"delete_fraudster_{fraudster_index}")],
+        [InlineKeyboardButton("❌ إلغاء", callback_data="admin_fraudsters")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    query.edit_message_text(
+        f"❓ هل أنت متأكد من حذف التاجر/النصاب التالي؟\n\n📛 الاسم: {fraudster['name']}",
+        reply_markup=reply_markup
+    )
+
+def delete_fraudster_confirmed(update: Update, context: CallbackContext):
+    query = update.callback_query
+    fraudster_index = int(query.data.split("_")[-1])
+    deleted_fraudster = data["fraudsters"].pop(fraudster_index)
+    save_data(data)
+    query.edit_message_text(f"✅ تم حذف التاجر/المحتال: {deleted_fraudster['name']} بنجاح.")
+
+def delete_username(update: Update, context: CallbackContext):
+    if not data["usernames"]:
+        update.callback_query.edit_message_text("📋 لا توجد قائمة بالمعرفات.")
     else:
-        query.edit_message_text("لا توجد بوتات فرعية حالياً.", parse_mode=ParseMode.HTML)
+        keyboard = [
+            [InlineKeyboardButton(f"❌ {username}", callback_data=f"confirm_delete_username_{i}")]
+            for i, username in enumerate(data["usernames"])
+        ]
+        keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="admin_usernames")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.callback_query.edit_message_text("❌ اختر المعرف الذي تريد حذفه:", reply_markup=reply_markup)
 
-def button(update: Update, context: CallbackContext) -> None:
+def confirm_delete_username(update: Update, context: CallbackContext):
     query = update.callback_query
-    data = query.data
-    
-    if data == 'add_sub_bot':
-        add_sub_bot_callback(update, context)
-    elif data == 'view_info':
-        view_info_callback(update, context)
-    elif data == 'delete_sub_bot':
-        delete_sub_bot_callback(update, context)
+    username_index = int(query.data.split("_")[-1])
+    username = data["usernames"][username_index]
+    keyboard = [
+        [InlineKeyboardButton("✅ نعم", callback_data=f"delete_username_{username_index}")],
+        [InlineKeyboardButton("❌ إلغاء", callback_data="admin_usernames")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    query.edit_message_text(
+        f"❓ هل أنت متأكد من حذف المعرف التالي؟\n\n🔗 المعرف: {username}",
+        reply_markup=reply_markup
+    )
 
+def delete_username_confirmed(update: Update, context: CallbackContext):
+    query = update.callback_query
+    username_index = int(query.data.split("_")[-1])
+    deleted_username = data["usernames"].pop(username_index)
+    save_data(data)
+    query.edit_message_text(f"✅ تم حذف المعرف: {deleted_username} بنجاح.")
 
-def main() -> None:
-    updater = Updater("7125482530:AAEzCo6WcF17bGn0xrg503NOGreQ912agwg")
-    
-    updater.dispatcher.add_handler(CommandHandler('start', start))
-    updater.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-    updater.dispatcher.add_handler(CallbackQueryHandler(button))
+def main():
+    load_data()
+    updater = Updater(token, use_context=True)
+    dp = updater.dispatcher
 
-    # بدء البوت
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CallbackQueryHandler(button_handler))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+
     WEBHOOK_URL = "https://telegrambotuc.onrender.com/webhook"  # ضع رابط Render هنا
 
-    bot = Bot(TOKENS)
+    bot = Bot(token)
     bot.set_webhook(WEBHOOK_URL)
 
 print("Webhook has been set successfully!")
 
 
-if __name__ == '__main__':
+
+def button_handler(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+
+    if query.data == "search_fraudsters":
+        context.user_data["action"] = "search_fraudster"
+        query.edit_message_text("🔍 أرسل النص الذي تريد البحث عنه.")
+    elif query.data == "search_usernames":
+        context.user_data["action"] = "search_username"
+        query.edit_message_text("🔍 أرسل اسم المستخدم الذي تريد البحث عنه.")
+    elif query.data == "admin_fraudsters":
+        admin_menu(update, context)
+    elif query.data == "admin_usernames":
+        admin_usernames_menu(update, context)
+    elif query.data == "add_fraudster":
+        context.user_data["action"] = "add_fraudster"
+        context.user_data["add_step"] = 0
+        query.edit_message_text("📛 أدخل اسم التاجر/النصاب:")
+    elif query.data == "add_username":
+        context.user_data["action"] = "add_username"
+        query.edit_message_text("🔍 أرسل اسم المستخدم الذي تريد إضافته.")
+    elif query.data == "list_fraudsters":
+        list_fraudsters(update, context)
+    elif query.data == "list_usernames":
+        list_usernames(update, context)
+    elif query.data == "delete_fraudster":
+        delete_fraudster(update, context)
+    elif query.data.startswith("confirm_delete_fraudster"):
+        confirm_delete_fraudster(update, context)
+    elif query.data.startswith("delete_fraudster_"):
+        delete_fraudster_confirmed(update, context)
+    elif query.data == "delete_username":
+        delete_username(update, context)
+    elif query.data.startswith("confirm_delete_username"):
+        confirm_delete_username(update, context)
+    elif query.data.startswith("delete_username_"):
+        delete_username_confirmed(update, context)
+    elif query.data == "broadcast_message":
+        context.user_data["action"] = "broadcast_message"
+        query.edit_message_text("✉️ أرسل الرسالة التي تريد إذاعتها.")
+
+if __name__ == "__main__":
     main()
+               
