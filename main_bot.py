@@ -168,7 +168,7 @@ def webhook(token):
 
 def setup_webhooks():
     # إعداد ويب هوك للبوت الرئيسي
-    setup_main_webhook("7125482530:AAEzCo6WcF17bGn0xrg503NOGreQ912agwg")  # استبدل "main_bot_token" بالتوكن الرئيسي
+    setup_main_webhook("7760053949:AAFOPSY1eD4GjelBo2D_rIa7nCmOn9n6OYM")  # استبدل "main_bot_token" بالتوكن الرئيسي
     
     # إعداد ويب هوك للبوتات الفرعية
     for bot in TOKENS:
