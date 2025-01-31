@@ -143,7 +143,7 @@ def button(update: Update, context: CallbackContext) -> None:
 # إضافة ويب هوك للبوت الرئيسي
 def setup_main_webhook(token: str):
     bot = Bot(token)
-    webhook_url = f"https://c5a56c19-7187-434e-b1c1-1e1509e8e54e-00-28trj3o3dlgxr.kirk.replit.dev/{token}/webhook"
+    webhook_url = f"https://telegrambotuc.onrender.com/{token}/webhook"
     bot.set_webhook(webhook_url)
 
 def process_update(update_json, token):
