@@ -140,6 +140,7 @@ def button(update: Update, context: CallbackContext) -> None:
     elif data == 'delete_sub_bot':
         delete_sub_bot_callback(update, context)
 
+
 def main() -> None:
     updater = Updater("7125482530:AAEzCo6WcF17bGn0xrg503NOGreQ912agwg")
     
@@ -148,8 +149,13 @@ def main() -> None:
     updater.dispatcher.add_handler(CallbackQueryHandler(button))
 
     # بدء البوت
-    updater.start_polling()
-    updater.idle()
+    WEBHOOK_URL = "https://telegrambotuc.onrender.com/webhook"  # ضع رابط Render هنا
+
+    bot = Bot(TOKENS)
+    bot.set_webhook(WEBHOOK_URL)
+
+print("Webhook has been set successfully!")
+
 
 if __name__ == '__main__':
     main()
